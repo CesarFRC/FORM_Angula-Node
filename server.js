@@ -1,6 +1,7 @@
 const cors = require('cors');
 const express = require('express');
 const mysql = require('mysql2');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 const port = 3000;
@@ -26,6 +27,9 @@ connection.connect(err => {
   console.log('Conectado a la base de datos MySQL');
 });
 
+//Clave de token
+const SECRET_KEY = 'clave123'
+
 app.post('/usuarios', (req, res) => {
   const { nombre, apellidos, email,edad,contrasena } = req.body;
 
@@ -39,8 +43,15 @@ app.post('/usuarios', (req, res) => {
       console.error('Error al insertar:', err);
       return res.status(500).json({ error: 'Error en la base de datos' });
     }
+     //Generar token con datos de usuario
+     const tokenPayload = {
+      id: results.insertId,
+      nombre,
+      email
+     };
 
-    res.json({ mensaje: 'Usuario insertado correctamente', id: results.insertId });
+     const token = jwt.sign(tokenPayload,SECRET_KEY,{expiresIn: '2h'})
+    res.json({ mensaje: 'Usuario insertado correctamente', id: results.insertId,token });
   });
 });
 
@@ -50,7 +61,28 @@ app.listen(port, () => {
 
 
 
-app.get('/usuarios', (req, res) => {
+
+
+function verificarToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+
+  if (!authHeader) {
+    return res.status(401).json({ error: "Token no proporcionado" });
+  }
+
+  const token = authHeader.split(' ')[1];
+  jwt.verify(token, SECRET_KEY, (err, usuario) => {
+    if (err) {
+      return res.status(403).json({ error: 'Token inválido o expirado' });
+    }
+
+    req.usuario = usuario; 
+    next(); 
+  });
+}
+
+
+app.get('/usuarios' ,verificarToken, (req, res) => {
   connection.query('SELECT * FROM usuarios', (err, results) => {
     if (err) {
       console.error('Error al obtener usuarios:', err);
